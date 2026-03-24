@@ -56,12 +56,15 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { searchMedicine, analyzeSymptoms, getHealthTip, translateUI, generateHighResImage, findNearbyHospitals, findNearbyDoctors, translateObject, chatWithDoctor, type MedicineInfo, type SymptomAnalysis, type DoctorRecommendation } from './services/geminiService';
 import { type Reminder, type AppTab, type SymptomHistoryItem, type FavoriteMedicine, type MedicineEntry } from './types';
+import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, db, doc, setDoc, getDoc, collection, getDocs, type User as FirebaseUser } from './firebase';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [symptomHistory, setSymptomHistory] = useState<SymptomHistoryItem[]>([]);
@@ -114,6 +117,46 @@ export default function App() {
     "Hello", "Welcome back", "Chat with Doctor", "Ask about any disease...", "Doctor's Advice", "Type your message...", "Send",
     "Recommended Doctors Near You", "Call Now", "Open in Maps", "Distance", "Phone"
   ];
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        // Sync user to Firestore
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName,
+            email: firebaseUser.email,
+            photoURL: firebaseUser.photoURL,
+            createdAt: new Date().toISOString()
+          });
+        }
+      } else {
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login error:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('mediguide_language', language);
@@ -294,6 +337,20 @@ export default function App() {
     setShowOnboarding(false);
   };
 
+  const isAdmin = user?.email === "kashinathsharma084@gmail.com";
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-50">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen onLogin={handleLogin} t={t} />;
+  }
+
   if (showOnboarding) {
     return <OnboardingScreen onComplete={handleOnboardingComplete} t={t} />;
   }
@@ -391,18 +448,29 @@ export default function App() {
               language={language} 
               setLanguage={setLanguage} 
               t={t}
+              onLogout={handleLogout}
+              user={user}
+            />
+          )}
+          {activeTab === 'users' && isAdmin && (
+            <UsersScreen 
+              key="users"
+              t={t}
             />
           )}
         </AnimatePresence>
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-2 py-3 flex justify-between items-center safe-bottom z-50">
+      <nav className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-2 py-3 flex justify-between items-center safe-bottom z-50 overflow-x-auto no-scrollbar">
         <NavButton active={activeTab === 'home'} onClick={() => setActiveTab('home')} icon={<Home size={18} />} label={t("Home")} />
         <NavButton active={activeTab === 'search'} onClick={() => setActiveTab('search')} icon={<Search size={18} />} label={t("Search")} />
         <NavButton active={activeTab === 'telehealth'} onClick={() => setActiveTab('telehealth')} icon={<Video size={18} />} label={t("Call")} />
         <NavButton active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} icon={<MessageSquare size={18} />} label={t("Chat")} />
         <NavButton active={activeTab === 'symptoms'} onClick={() => setActiveTab('symptoms')} icon={<Stethoscope size={18} />} label={t("Check")} />
+        {isAdmin && (
+          <NavButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<User size={18} />} label={t("Users")} />
+        )}
         <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={18} />} label={t("Settings")} />
       </nav>
 
@@ -419,6 +487,48 @@ export default function App() {
           </motion.div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin, t }: { onLogin: () => void, t: (s: string) => string }) {
+  return (
+    <div className="flex flex-col h-screen bg-white max-w-md mx-auto overflow-hidden">
+      <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-12">
+        <div className="w-24 h-24 bg-primary/10 rounded-[40px] flex items-center justify-center text-primary animate-bounce">
+          <Stethoscope size={48} />
+        </div>
+        
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl font-bold text-slate-800 tracking-tight">MediGuide AI</h1>
+          <p className="text-slate-500 text-lg leading-relaxed max-w-[280px] mx-auto">
+            {t("Your personal AI health companion for instant medical insights.")}
+          </p>
+        </div>
+
+        <div className="w-full space-y-4">
+          <button 
+            onClick={onLogin}
+            className="w-full bg-primary text-white py-5 rounded-3xl font-bold text-lg shadow-2xl shadow-primary/30 flex items-center justify-center gap-3 active:scale-95 transition-all"
+          >
+            <Globe size={24} />
+            {t("Continue with Google")}
+          </button>
+          
+          <p className="text-[10px] text-center text-slate-400 px-8 leading-relaxed">
+            By continuing, you agree to our Terms of Service and Privacy Policy. 
+            MediGuide AI is for educational purposes only.
+          </p>
+        </div>
+      </div>
+
+      <div className="p-8 bg-slate-50 border-t border-slate-100">
+        <div className="flex justify-center gap-8 opacity-40 grayscale">
+          <ShieldAlert size={24} />
+          <HeartPulse size={24} />
+          <Activity size={24} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -518,7 +628,7 @@ function OnboardingScreen({ onComplete, t }: { onComplete: (name: string, age: s
   );
 }
 
-function SettingsScreen({ language, setLanguage, t }: { language: string, setLanguage: (l: string) => void, t: (s: string) => string }) {
+function SettingsScreen({ language, setLanguage, t, onLogout, user }: { language: string, setLanguage: (l: string) => void, t: (s: string) => string, onLogout: () => void, user: FirebaseUser | null }) {
   const commonLanguages = [
     'English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese', 'Korean', 'Hindi', 'Arabic', 'Portuguese', 'Russian', 'Italian', 'Vietnamese', 'Thai', 'Bengali'
   ];
@@ -535,6 +645,28 @@ function SettingsScreen({ language, setLanguage, t }: { language: string, setLan
         <h2 className="text-2xl font-bold text-slate-800">{t("Settings")}</h2>
         <p className="text-sm text-slate-500 font-medium">{t("Customize your health companion")}</p>
       </div>
+
+      {/* User Profile Section */}
+      {user && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+          <img 
+            src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
+            alt={user.displayName || 'User'} 
+            className="w-16 h-16 rounded-2xl object-cover border-2 border-primary/10"
+          />
+          <div className="flex-1">
+            <h3 className="font-bold text-slate-800">{user.displayName}</h3>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+          <button 
+            onClick={onLogout}
+            className="p-3 rounded-xl bg-rose-50 text-rose-500 hover:bg-rose-100 transition-colors"
+            title="Logout"
+          >
+            <X size={20} />
+          </button>
+        </div>
+      )}
 
       <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
         <div className="flex items-center gap-3 mb-2">
@@ -585,6 +717,55 @@ function SettingsScreen({ language, setLanguage, t }: { language: string, setLan
             >
               {t("Apply")}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
+            <Info size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800">{t("System Information")}</h3>
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{t("Project Details")}</p>
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t("Computer Languages Used")}</label>
+            <div className="flex flex-wrap gap-2">
+              {['TypeScript', 'React', 'Tailwind CSS', 'Node.js'].map(lang => (
+                <span key={lang} className="bg-slate-50 text-slate-600 px-3 py-1 rounded-full text-[10px] font-bold border border-slate-100">{lang}</span>
+              ))}
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t("Data Storage")}</label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Cloud Database</span>
+                <span className="font-bold text-slate-700">Firebase Firestore</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Authentication</span>
+                <span className="font-bold text-slate-700">Firebase Auth</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Local Cache</span>
+                <span className="font-bold text-slate-700">Browser LocalStorage</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t("Deployment Status")}</label>
+            <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-bold text-emerald-700">{t("Application is Live & Healthy")}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -2669,6 +2850,78 @@ function TelehealthScreen({ language, t }: { language: string, t: (s: string) =>
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm space-y-4">
               <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
               <p className="text-white font-medium">{t("Connecting...")}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function UsersScreen({ t }: { t: (s: string) => string }) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        const usersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setUsers(usersList);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="p-6 space-y-6"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">{t("User Management")}</h2>
+          <p className="text-xs text-slate-500 mt-1">{t("Admin access to user data")}</p>
+        </div>
+        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+          <User size={24} />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+          <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{t("Loading Users...")}</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {users.map(u => (
+            <div key={u.id} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+              <img 
+                src={u.photoURL || `https://ui-avatars.com/api/?name=${u.displayName}`} 
+                alt={u.displayName} 
+                className="w-12 h-12 rounded-xl object-cover"
+              />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-slate-800 truncate">{u.displayName}</h3>
+                <p className="text-[10px] text-slate-500 truncate">{u.email}</p>
+                <p className="text-[9px] text-slate-400 mt-1">UID: {u.uid}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Joined</p>
+                <p className="text-[10px] font-bold text-slate-700">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}</p>
+              </div>
+            </div>
+          ))}
+          {users.length === 0 && (
+            <div className="text-center py-20 text-slate-400 italic">
+              {t("No users found in database.")}
             </div>
           )}
         </div>

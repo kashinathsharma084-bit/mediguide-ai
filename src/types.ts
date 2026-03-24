@@ -26,4 +26,4 @@ export interface FavoriteMedicine {
   info: any; // MedicineInfo
 }
 
-export type AppTab = 'home' | 'search' | 'symptoms' | 'chat' | 'reminders' | 'summary' | 'settings' | 'telehealth';
+export type AppTab = 'home' | 'search' | 'symptoms' | 'chat' | 'reminders' | 'summary' | 'settings' | 'telehealth' | 'users';

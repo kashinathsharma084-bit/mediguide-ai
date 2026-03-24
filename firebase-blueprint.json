@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique user ID" },
+        "displayName": { "type": "string", "description": "The user's display name" },
+        "email": { "type": "string", "format": "email", "description": "The user's email address" },
+        "photoURL": { "type": "string", "description": "The user's profile picture URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The time the user was created" }
+      },
+      "required": ["uid", "email"]
+    },
+    "ChatHistory": {
+      "title": "ChatHistory",
+      "description": "User's chat history with the AI doctor",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The user ID" },
+        "role": { "type": "string", "enum": ["user", "model"], "description": "The role of the message sender" },
+        "text": { "type": "string", "description": "The message text" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "The time the message was sent" }
+      },
+      "required": ["userId", "role", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users/{userId}/chats/{chatId}": {
+      "schema": "ChatHistory",
+      "description": "User's chat history"
+    }
+  }
+}
