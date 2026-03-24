@@ -56,7 +56,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { searchMedicine, analyzeSymptoms, getHealthTip, translateUI, generateHighResImage, findNearbyHospitals, findNearbyDoctors, translateObject, chatWithDoctor, type MedicineInfo, type SymptomAnalysis, type DoctorRecommendation } from './services/geminiService';
 import { type Reminder, type AppTab, type SymptomHistoryItem, type FavoriteMedicine, type MedicineEntry } from './types';
-import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, db, doc, setDoc, getDoc, collection, getDocs, type User as FirebaseUser } from './firebase';
+import { auth, signInAnonymously, signOut, onAuthStateChanged, db, doc, setDoc, getDoc, collection, getDocs, type User as FirebaseUser } from './firebase';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -128,9 +128,9 @@ export default function App() {
         if (!userSnap.exists()) {
           await setDoc(userRef, {
             uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName,
-            email: firebaseUser.email,
-            photoURL: firebaseUser.photoURL,
+            displayName: firebaseUser.displayName || 'Guest',
+            email: firebaseUser.email || null,
+            photoURL: firebaseUser.photoURL || null,
             createdAt: new Date().toISOString()
           });
         }
@@ -144,7 +144,7 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      await signInAnonymously(auth);
     } catch (error) {
       console.error("Login error:", error);
     }
@@ -337,7 +337,7 @@ export default function App() {
     setShowOnboarding(false);
   };
 
-  const isAdmin = user?.email === "kashinathsharma084@gmail.com";
+  const isAdmin = false;
 
   if (authLoading) {
     return (
@@ -452,12 +452,6 @@ export default function App() {
               user={user}
             />
           )}
-          {activeTab === 'users' && isAdmin && (
-            <UsersScreen 
-              key="users"
-              t={t}
-            />
-          )}
         </AnimatePresence>
       </main>
 
@@ -468,9 +462,6 @@ export default function App() {
         <NavButton active={activeTab === 'telehealth'} onClick={() => setActiveTab('telehealth')} icon={<Video size={18} />} label={t("Call")} />
         <NavButton active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} icon={<MessageSquare size={18} />} label={t("Chat")} />
         <NavButton active={activeTab === 'symptoms'} onClick={() => setActiveTab('symptoms')} icon={<Stethoscope size={18} />} label={t("Check")} />
-        {isAdmin && (
-          <NavButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<User size={18} />} label={t("Users")} />
-        )}
         <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={18} />} label={t("Settings")} />
       </nav>
 
@@ -511,8 +502,8 @@ function LoginScreen({ onLogin, t }: { onLogin: () => void, t: (s: string) => st
             onClick={onLogin}
             className="w-full bg-primary text-white py-5 rounded-3xl font-bold text-lg shadow-2xl shadow-primary/30 flex items-center justify-center gap-3 active:scale-95 transition-all"
           >
-            <Globe size={24} />
-            {t("Continue with Google")}
+            <Activity size={24} />
+            {t("Get Started")}
           </button>
           
           <p className="text-[10px] text-center text-slate-400 px-8 leading-relaxed">
@@ -2850,78 +2841,6 @@ function TelehealthScreen({ language, t }: { language: string, t: (s: string) =>
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm space-y-4">
               <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
               <p className="text-white font-medium">{t("Connecting...")}</p>
-            </div>
-          )}
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-function UsersScreen({ t }: { t: (s: string) => string }) {
-  const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'users'));
-        const usersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setUsers(usersList);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsers();
-  }, []);
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="p-6 space-y-6"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">{t("User Management")}</h2>
-          <p className="text-xs text-slate-500 mt-1">{t("Admin access to user data")}</p>
-        </div>
-        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-          <User size={24} />
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 space-y-4">
-          <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{t("Loading Users...")}</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {users.map(u => (
-            <div key={u.id} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-              <img 
-                src={u.photoURL || `https://ui-avatars.com/api/?name=${u.displayName}`} 
-                alt={u.displayName} 
-                className="w-12 h-12 rounded-xl object-cover"
-              />
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-slate-800 truncate">{u.displayName}</h3>
-                <p className="text-[10px] text-slate-500 truncate">{u.email}</p>
-                <p className="text-[9px] text-slate-400 mt-1">UID: {u.uid}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Joined</p>
-                <p className="text-[10px] font-bold text-slate-700">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}</p>
-              </div>
-            </div>
-          ))}
-          {users.length === 0 && (
-            <div className="text-center py-20 text-slate-400 italic">
-              {t("No users found in database.")}
             </div>
           )}
         </div>

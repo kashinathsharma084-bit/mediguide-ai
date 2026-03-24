@@ -49,11 +49,11 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+      return data.keys().hasAll(['uid', 'createdAt']) &&
              data.uid == request.auth.uid &&
-             isValidEmail(data.email) &&
              isValidDateString(data.createdAt) &&
              (data.get('displayName', '') is string) &&
+             (data.get('email', '') == null || isValidEmail(data.get('email', ''))) &&
              (data.get('photoURL', '') is string);
     }
 
@@ -66,8 +66,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (request.auth.token.email == "kashinathsharma084@gmail.com" && request.auth.token.email_verified == true);
+      return false;
     }
 
     // ===============================================================
