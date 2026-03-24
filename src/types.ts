@@ -7,23 +7,75 @@ export interface Reminder {
   id: string;
   medicines: MedicineEntry[];
   time: string;
-  dates: string[]; // Specific dates for the reminder (YYYY-MM-DD)
   days: string[];
+  dates?: string[];
   active: boolean;
-  takenDates?: string[]; // ISO date strings
+  takenDates?: string[];
 }
 
 export interface SymptomHistoryItem {
   id: string;
   timestamp: number;
   symptoms: string;
-  analysis: any; // SymptomAnalysis
+  analysis: any;
+  imageUrl?: string;
 }
 
-export interface FavoriteMedicine {
-  id: string;
+export interface MedicineInfo {
   name: string;
-  info: any; // MedicineInfo
+  usage: string;
+  dosage: string;
+  sideEffects: string;
+  interactions: string;
+  precautions: string;
+  contraindications: string;
+  storage: string;
+  pregnancySafety: string;
+  activeIngredients: string;
+  manufacturerInfo: string;
+  doctorAdvice: string;
+  imageUrl?: string;
+  userImageUrl?: string;
 }
 
-export type AppTab = 'home' | 'search' | 'symptoms' | 'chat' | 'reminders' | 'summary' | 'settings' | 'telehealth' | 'users';
+export interface NearbyPlace {
+  name: string;
+  address: string;
+  distance: string;
+  rating?: number;
+  phone?: string;
+  mapsUrl: string;
+}
+
+export interface DoctorRecommendation {
+  name: string;
+  specialty: string;
+  address: string;
+  distance: string;
+  phone: string;
+  mapsUrl: string;
+}
+
+export interface Appointment {
+  id: string;
+  userId: string;
+  doctorName: string;
+  specialty: string;
+  date: string;
+  time: string;
+  reason: string;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  createdAt: number;
+}
+
+export interface VitalSigns {
+  id: string;
+  userId: string;
+  timestamp: number;
+  weight?: number;
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  heartRate?: number;
+  temperature?: number;
+  bloodSugar?: number;
+}

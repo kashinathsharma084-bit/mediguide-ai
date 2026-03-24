@@ -1,19 +1,20 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, updateProfile } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, getDoc, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, orderBy, limit, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+const googleProvider = new GoogleAuthProvider();
 
 export { 
-  signInWithPopup, 
-  signInAnonymously,
+  googleProvider,
+  signInWithPopup,
   signOut, 
   onAuthStateChanged, 
+  updateProfile,
   collection, 
   doc, 
   setDoc, 
@@ -25,6 +26,7 @@ export {
   addDoc, 
   serverTimestamp, 
   orderBy, 
-  limit 
+  limit,
+  deleteDoc
 };
 export type { User };

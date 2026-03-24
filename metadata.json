@@ -1,8 +1,9 @@
 {
-  "name": "Remix: Copy of Copy of Copy of MediGuide AI",
+  "name": "MediGuide AI",
   "description": "A comprehensive health companion for medicine information, symptom checking, and medication reminders.",
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "geolocation"
   ]
 }

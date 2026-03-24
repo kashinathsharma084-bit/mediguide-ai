@@ -65,6 +65,24 @@ service cloud.firestore {
              isValidDateString(data.timestamp);
     }
 
+    function isValidAppointment(data) {
+      return data.keys().hasAll(['userId', 'doctorName', 'date', 'time', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.doctorName is string && data.doctorName.size() > 0 && data.doctorName.size() < 100 &&
+             data.date is string && data.time is string &&
+             data.status in ['pending', 'confirmed', 'cancelled'] &&
+             data.createdAt is number;
+    }
+
+    function isValidVital(data) {
+      return data.keys().hasAll(['userId', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.timestamp is number &&
+             (data.get('weight', 0) is number) &&
+             (data.get('heartRate', 0) is number) &&
+             (data.get('temperature', 0) is number);
+    }
+
     function isAdmin() {
       return false;
     }
@@ -86,6 +104,20 @@ service cloud.firestore {
         allow update: if false; // Chats are immutable
         allow delete: if isOwner(userId);
       }
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidAppointment(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidAppointment(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /vitals/{vitalId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidVital(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidVital(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // Default deny

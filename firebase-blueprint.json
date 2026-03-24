@@ -24,6 +24,37 @@
         "timestamp": { "type": "string", "format": "date-time", "description": "The time the message was sent" }
       },
       "required": ["userId", "role", "text", "timestamp"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "User's doctor appointments",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The user ID" },
+        "doctorName": { "type": "string", "description": "The doctor's name" },
+        "specialty": { "type": "string", "description": "The doctor's specialty" },
+        "date": { "type": "string", "description": "The appointment date" },
+        "time": { "type": "string", "description": "The appointment time" },
+        "reason": { "type": "string", "description": "The reason for the visit" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled"], "description": "The appointment status" },
+        "createdAt": { "type": "number", "description": "The time the appointment was booked" }
+      },
+      "required": ["userId", "doctorName", "date", "time", "status", "createdAt"]
+    },
+    "VitalSigns": {
+      "title": "VitalSigns",
+      "description": "User's health vitals tracking",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The user ID" },
+        "timestamp": { "type": "number", "description": "The time the vitals were recorded" },
+        "weight": { "type": "number", "description": "The user's weight in kg" },
+        "bloodPressureSystolic": { "type": "number", "description": "Systolic blood pressure" },
+        "bloodPressureDiastolic": { "type": "number", "description": "Diastolic blood pressure" },
+        "heartRate": { "type": "number", "description": "Heart rate in bpm" },
+        "temperature": { "type": "number", "description": "Body temperature in Celsius" }
+      },
+      "required": ["userId", "timestamp"]
     }
   },
   "firestore": {
@@ -34,6 +65,14 @@
     "/users/{userId}/chats/{chatId}": {
       "schema": "ChatHistory",
       "description": "User's chat history"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Doctor appointments"
+    },
+    "/vitals/{vitalId}": {
+      "schema": "VitalSigns",
+      "description": "Health vitals tracking"
     }
   }
 }
