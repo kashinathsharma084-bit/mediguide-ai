@@ -9,7 +9,7 @@ import {
   PhoneOff, Share2, Download, Volume2, Languages, HelpCircle, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { auth, signOut, db, collection, onSnapshot, query, where, orderBy, addDoc, doc, setDoc, limit, deleteDoc } from '../firebase';
+import { auth, signOut, db, collection, onSnapshot, query, where, orderBy, addDoc, doc, setDoc, limit, deleteDoc, getDoc } from '../firebase';
 import { cn } from '../lib/utils';
 import { Reminder, SymptomHistoryItem, MedicineInfo, NearbyPlace, DoctorRecommendation } from '../types';
 
@@ -24,6 +24,8 @@ import SummaryScreen from '../components/screens/SummaryScreen';
 import ProfileScreen from '../components/screens/ProfileScreen';
 import ProgressScreen from '../components/screens/ProgressScreen';
 import AppointmentScreen from '../components/screens/AppointmentScreen';
+import DoctorDashboard from '../components/screens/DoctorDashboard';
+import DoctorPanel from '../components/DoctorPanel';
 
 interface HomePageProps {
   user: any;
@@ -39,9 +41,19 @@ export default function HomePage({ user, language, setLanguage, isOnline, t }: H
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [history, setHistory] = useState<SymptomHistoryItem[]>([]);
+  const [isDoctor, setIsDoctor] = useState(false);
+  const [showDoctorRegistration, setShowDoctorRegistration] = useState(false);
 
   useEffect(() => {
     if (!user) return;
+
+    // Check if user is a doctor
+    const doctorRef = doc(db, 'doctors', user.uid);
+    getDoc(doctorRef).then(docSnap => {
+      if (docSnap.exists()) {
+        setIsDoctor(true);
+      }
+    });
 
     const remindersQuery = query(collection(db, 'reminders'), where('userId', '==', user.uid));
     const unsubReminders = onSnapshot(remindersQuery, (snapshot) => {
@@ -123,11 +135,12 @@ export default function HomePage({ user, language, setLanguage, isOnline, t }: H
       case 'check': return <SymptomScreen language={language} isOnline={isOnline} onSaveHistory={(h) => addDoc(collection(db, 'history'), { ...h, userId: user.uid })} history={history} onDeleteHistory={deleteHistory} t={t} />;
       case 'chat': return <ChatScreen language={language} isOnline={isOnline} t={t} />;
       case 'reminders': return <RemindersScreen reminders={reminders} onAdd={addReminder} onDelete={deleteReminder} onToggle={toggleReminder} onMarkAsTaken={markAsTaken} t={t} />;
-      case 'telehealth': return <TelehealthScreen language={language} t={t} />;
+      case 'telehealth': return <TelehealthScreen language={language} t={t} user={user} />;
       case 'summary': return <SummaryScreen reminders={reminders} history={history} t={t} />;
       case 'profile': return <ProfileScreen user={user} t={t} />;
       case 'progress': return <ProgressScreen user={user} t={t} />;
       case 'appointments': return <AppointmentScreen user={user} t={t} />;
+      case 'doctor': return <DoctorDashboard user={user} t={t} />;
       default: return <HomeScreen onNavigate={setActiveTab} reminders={reminders} history={history} t={t} />;
     }
   };
@@ -168,6 +181,17 @@ export default function HomePage({ user, language, setLanguage, isOnline, t }: H
               <User size={20} />
             )}
           </button>
+          {isDoctor && (
+            <button 
+              onClick={() => setActiveTab('doctor')}
+              className={cn(
+                "w-10 h-10 rounded-2xl flex items-center justify-center transition-all",
+                activeTab === 'doctor' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-primary/10 text-primary"
+              )}
+            >
+              <Stethoscope size={20} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -250,6 +274,7 @@ export default function HomePage({ user, language, setLanguage, isOnline, t }: H
                   { id: 'home', icon: Home, label: 'Dashboard' },
                   { id: 'progress', icon: Activity, label: 'Health Progress' },
                   { id: 'appointments', icon: Calendar, label: 'Appointments' },
+                  { id: isDoctor ? 'doctor' : 'register-doctor', icon: Stethoscope, label: isDoctor ? 'Doctor Panel' : 'Join as Doctor' },
                   { id: 'check', icon: HeartPulse, label: 'Symptom Checker' },
                   { id: 'search', icon: Search, label: 'Medicine Search' },
                   { id: 'reminders', icon: Bell, label: 'Medication Alerts' },
@@ -258,7 +283,14 @@ export default function HomePage({ user, language, setLanguage, isOnline, t }: H
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
+                    onClick={() => { 
+                      if (item.id === 'register-doctor') {
+                        setShowDoctorRegistration(true);
+                      } else {
+                        setActiveTab(item.id); 
+                      }
+                      setIsSidebarOpen(false); 
+                    }}
                     className={cn(
                       "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all",
                       activeTab === item.id ? "bg-primary/5 text-primary" : "text-slate-600 hover:bg-slate-50"
@@ -305,6 +337,24 @@ export default function HomePage({ user, language, setLanguage, isOnline, t }: H
               </div>
             </motion.aside>
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDoctorRegistration && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <DoctorPanel 
+              onClose={() => {
+                setShowDoctorRegistration(false);
+                // Re-check doctor status after closing
+                const doctorRef = doc(db, 'doctors', user.uid);
+                getDoc(doctorRef).then(docSnap => {
+                  if (docSnap.exists()) setIsDoctor(true);
+                });
+              }} 
+              t={t} 
+            />
+          </div>
         )}
       </AnimatePresence>
     </div>

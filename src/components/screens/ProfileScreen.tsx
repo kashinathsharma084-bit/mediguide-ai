@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { User as UserIcon, Camera, Check, Loader2, LogOut } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { User as UserIcon, Camera, Check, Loader2, LogOut, Stethoscope, ChevronRight } from 'lucide-react';
 import { auth, updateProfile, signOut } from '../../firebase';
 import { User } from 'firebase/auth';
+import DoctorPanel from '../DoctorPanel';
 
 interface ProfileScreenProps {
   user: User;
@@ -14,6 +15,7 @@ export default function ProfileScreen({ user, t }: ProfileScreenProps) {
   const [photoURL, setPhotoURL] = useState(user.photoURL || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [showDoctorPanel, setShowDoctorPanel] = useState(false);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,10 +36,11 @@ export default function ProfileScreen({ user, t }: ProfileScreenProps) {
   };
 
   return (
+    <>
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-6 space-y-8"
+      className="p-6 space-y-8 pb-24"
     >
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">{t("Edit Profile")}</h2>
@@ -47,6 +50,26 @@ export default function ProfileScreen({ user, t }: ProfileScreenProps) {
         >
           <LogOut size={16} />
           {t("Sign Out")}
+        </button>
+      </div>
+
+      {/* Doctor Panel Trigger */}
+      <div className="bg-primary/5 border border-primary/10 p-6 rounded-[32px] space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+            <Stethoscope size={24} />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-slate-800">{t("Are you a Doctor?")}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{t("Register your profile to help patients find you.")}</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setShowDoctorPanel(true)}
+          className="w-full bg-white border border-primary/20 text-primary py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/5 transition-all shadow-sm"
+        >
+          {t("Manage Doctor Profile")}
+          <ChevronRight size={16} />
         </button>
       </div>
 
@@ -129,5 +152,14 @@ export default function ProfileScreen({ user, t }: ProfileScreenProps) {
         </div>
       </div>
     </motion.div>
+    
+    <AnimatePresence>
+      {showDoctorPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <DoctorPanel onClose={() => setShowDoctorPanel(false)} t={t} />
+        </div>
+      )}
+    </AnimatePresence>
+    </>
   );
 }

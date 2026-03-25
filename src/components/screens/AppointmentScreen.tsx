@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   Calendar, Clock, User as UserIcon, Plus, History, 
-  ChevronRight, CheckCircle2, AlertCircle, Loader2, X
+  ChevronRight, CheckCircle2, AlertCircle, Loader2, X,
+  Stethoscope, MapPin
 } from 'lucide-react';
-import { db, collection, query, where, orderBy, onSnapshot, addDoc, deleteDoc, doc } from '../../firebase';
+import { db, collection, query, where, orderBy, onSnapshot, addDoc, deleteDoc, doc, getDocs } from '../../firebase';
 import { User } from 'firebase/auth';
-import { Appointment } from '../../types';
+import { Appointment, Doctor } from '../../types';
 import { cn } from '../../lib/utils';
 
 interface AppointmentScreenProps {
@@ -16,9 +17,11 @@ interface AppointmentScreenProps {
 
 export default function AppointmentScreen({ user, t }: AppointmentScreenProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newAppointment, setNewAppointment] = useState<Partial<Appointment>>({
+    doctorUid: '',
     doctorName: '',
     specialty: '',
     date: '',
@@ -40,6 +43,18 @@ export default function AppointmentScreen({ user, t }: AppointmentScreenProps) {
       setIsLoading(false);
     });
 
+    const fetchDoctors = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'doctors'));
+        const doctorsList = querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
+      } catch (error) {
+        console.error("Error fetching doctors:", error);
+      }
+    };
+
+    fetchDoctors();
+
     return () => unsub();
   }, [user.uid]);
 
@@ -53,6 +68,7 @@ export default function AppointmentScreen({ user, t }: AppointmentScreenProps) {
       });
       setShowAddModal(false);
       setNewAppointment({
+        doctorUid: '',
         doctorName: '',
         specialty: '',
         date: '',
@@ -121,7 +137,7 @@ export default function AppointmentScreen({ user, t }: AppointmentScreenProps) {
 
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-primary shrink-0">
-                  <UserIcon size={24} />
+                  <Stethoscope size={24} />
                 </div>
                 <div className="flex-1">
                   <h4 className="font-bold text-slate-800">{appt.doctorName}</h4>
@@ -167,7 +183,7 @@ export default function AppointmentScreen({ user, t }: AppointmentScreenProps) {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden"
           >
-            <div className="p-8 space-y-6">
+            <div className="p-8 space-y-6 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold text-slate-800">{t("Book Appointment")}</h3>
                 <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
@@ -177,26 +193,66 @@ export default function AppointmentScreen({ user, t }: AppointmentScreenProps) {
 
               <form onSubmit={handleBookAppointment} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">{t("Doctor Name")}</label>
-                  <input 
-                    type="text"
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">{t("Select Doctor")}</label>
+                  <select 
                     required
-                    placeholder={t("e.g. Dr. Sharma")}
-                    onChange={(e) => setNewAppointment({...newAppointment, doctorName: e.target.value})}
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                    onChange={(e) => {
+                      const doc = doctors.find(d => d.uid === e.target.value);
+                      if (doc) {
+                        setNewAppointment({
+                          ...newAppointment,
+                          doctorUid: doc.uid,
+                          doctorName: doc.name,
+                          specialty: doc.speciality
+                        });
+                      } else {
+                        setNewAppointment({
+                          ...newAppointment,
+                          doctorUid: '',
+                          doctorName: '',
+                          specialty: ''
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">{t("Choose a doctor...")}</option>
+                    {doctors.map(doc => (
+                      <option key={doc.uid} value={doc.uid}>
+                        {doc.name} - {doc.speciality}
+                      </option>
+                    ))}
+                    <option value="other">{t("Other / Manual Entry")}</option>
+                  </select>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">{t("Specialty")}</label>
-                  <input 
-                    type="text"
-                    required
-                    placeholder={t("e.g. Cardiologist")}
-                    onChange={(e) => setNewAppointment({...newAppointment, specialty: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
+                {(!newAppointment.doctorName || doctors.length === 0) && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">{t("Doctor Name")}</label>
+                      <input 
+                        type="text"
+                        required
+                        placeholder={t("e.g. Dr. Sharma")}
+                        value={newAppointment.doctorName}
+                        onChange={(e) => setNewAppointment({...newAppointment, doctorName: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">{t("Specialty")}</label>
+                      <input 
+                        type="text"
+                        required
+                        placeholder={t("e.g. Cardiologist")}
+                        value={newAppointment.specialty}
+                        onChange={(e) => setNewAppointment({...newAppointment, specialty: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

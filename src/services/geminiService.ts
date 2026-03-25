@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel, FunctionDeclaration } from "@google/genai";
+import { db, collection, getDocs, query, where } from "../firebase";
 
 const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY || "" });
 
@@ -477,24 +478,136 @@ export const generateHighResImage = async (medicineName: string, size: "1K" | "2
   }
 };
 
-export const chatWithDoctor = async (message: string, history: { role: 'user' | 'model', parts: { text: string }[] }[], language: string = 'English'): Promise<string> => {
+export const chatWithDoctor = async (message: string, history: { role: 'user' | 'model', parts: { text: string }[] }[], language: string = 'English', lat?: number, lng?: number): Promise<string> => {
   const ai = getAI();
+  
+  const searchDoctorsInDatabase: FunctionDeclaration = {
+    name: "searchDoctorsInDatabase",
+    description: "Search for doctors in the provided database by speciality",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        speciality: {
+          type: Type.STRING,
+          description: "The doctor speciality to search for (e.g., Cardiologist, Dentist)"
+        }
+      },
+      required: ["speciality"]
+    }
+  };
+
   try {
     const chat = ai.chats.create({
       model: "gemini-3-flash-preview",
       config: {
-        systemInstruction: `You are a warm, professional, and familiar family doctor. 
-        Your goal is to help users understand diseases, symptoms, and general health concerns.
-        Always reply in a friendly, caring, and reassuring tone, like a doctor who has known the patient for years.
-        Provide clear, easy-to-understand explanations about what kind of disease something is, its causes, and general advice.
-        IMPORTANT: Always include a disclaimer that your advice is for informational purposes only and they should consult a real doctor in person for a proper diagnosis and treatment plan.
-        The entire response MUST be in ${language}.`,
+        systemInstruction: `You are Mediguide AI, a healthcare assistant that helps users find doctors quickly.
+        
+        When a user asks about symptoms, diseases, or doctor recommendations:
+        1. Identify the required doctor speciality.
+        2. Suggest relevant doctors from the provided database using the searchDoctorsInDatabase tool.
+        3. If no doctors are found in the database, use the Google Maps tool as a secondary source.
+        4. Display doctor details in a clean, structured format.
+        
+        Always include:
+        - Doctor Name
+        - Speciality
+        - Sitting Time / Availability (if available, else N/A)
+        - Days Available (if available, else N/A)
+        - Hospital / Clinic Name
+        - Phone Number (click to call format: [Number](tel:Number))
+        
+        Rules:
+        - Keep answers short and user-friendly.
+        - If multiple doctors are available, show top 3–5.
+        - If no doctor is available, suggest nearest alternative speciality.
+        - Do not give medical diagnosis—only guidance and doctor suggestions.
+        - Be polite and helpful.
+        - The entire response MUST be in ${language}.
+        
+        Format response like:
+        
+        👨‍⚕️ Doctor Recommendation:
+        
+        1. Dr. [Name]
+           🩺 Speciality: [Speciality]
+           🕒 Time: [Timing]
+           📅 Days: [Days]
+           📍 Location: [Hospital/Clinic]
+           📞 Phone: [Number](tel:Number)
+        
+        End with:
+        "Would you like to book an appointment or see more doctors?"`,
+        tools: [
+          { googleMaps: {} },
+          { functionDeclarations: [searchDoctorsInDatabase] }
+        ],
+        toolConfig: {
+          includeServerSideToolInvocations: true,
+          retrievalConfig: lat && lng ? {
+            latLng: {
+              latitude: lat,
+              longitude: lng
+            }
+          } : undefined
+        } as any
       },
       history: history,
     });
 
-    const response = await chat.sendMessage({ message });
-    return response.text || "I'm sorry, I couldn't process that. How can I help you today?";
+    let response = await chat.sendMessage({ message });
+    
+    // Handle function calls
+    if (response.functionCalls) {
+      const functionResponses = [];
+      for (const call of response.functionCalls) {
+        if (call.name === "searchDoctorsInDatabase") {
+          const { speciality } = call.args as { speciality: string };
+          try {
+            const q = query(collection(db, 'doctors'), where('speciality', '==', speciality));
+            const snapshot = await getDocs(q);
+            const doctors = snapshot.docs.map(doc => doc.data());
+            functionResponses.push({
+              name: call.name,
+              response: { doctors },
+              id: call.id
+            });
+          } catch (error) {
+            console.error("Error searching doctors in database:", error);
+            functionResponses.push({
+              name: call.name,
+              response: { error: "Failed to search database", doctors: [] },
+              id: call.id
+            });
+          }
+        }
+      }
+      
+      if (functionResponses.length > 0) {
+        response = await chat.sendMessage({
+          message: functionResponses.map(r => ({
+            functionResponse: {
+              name: r.name,
+              response: r.response
+            }
+          })) as any
+        });
+      }
+    }
+    
+    // Extract grounding URLs if any and append them
+    let text = response.text || "I'm sorry, I couldn't process that. How can I help you today?";
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+      const links = chunks
+        .filter((c: any) => c.maps?.uri)
+        .map((c: any) => `\n- [${c.maps.title}](${c.maps.uri})`)
+        .join('');
+      if (links) {
+        text += "\n\n### Maps Links:" + links;
+      }
+    }
+    
+    return text;
   } catch (error) {
     console.error("Error in doctor chat:", error);
     return "I'm having a little trouble connecting right now. Please try again in a moment.";

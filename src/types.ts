@@ -1,3 +1,11 @@
+export type AppTab = 'home' | 'reminders' | 'symptoms' | 'chat' | 'profile' | 'users' | 'search' | 'summary' | 'telehealth' | 'settings';
+
+export interface FavoriteMedicine {
+  id: string;
+  name: string;
+  info: MedicineInfo;
+}
+
 export interface MedicineEntry {
   name: string;
   dosage: string;
@@ -59,6 +67,7 @@ export interface DoctorRecommendation {
 export interface Appointment {
   id: string;
   userId: string;
+  doctorUid?: string;
   doctorName: string;
   specialty: string;
   date: string;
@@ -78,4 +87,25 @@ export interface VitalSigns {
   heartRate?: number;
   temperature?: number;
   bloodSugar?: number;
+}
+
+export interface Doctor {
+  uid: string;
+  name: string;
+  speciality: string;
+  sittingTime: string;
+  daysAvailable: string[];
+  hospitalName: string;
+  phone: string;
+  email?: string;
+  createdAt?: string;
+}
+
+export interface UserProfile {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL?: string;
+  createdAt: string;
+  consultationId?: string;
 }

@@ -22,6 +22,31 @@ service cloud.firestore {
     //   - text: string (required) - The message text
     //   - timestamp: string (required, date-time format) - The time the message was sent
     //
+    // Collection: doctors
+    // Document ID: {doctorId} (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required) - The unique doctor ID
+    //   - name: string (required) - Doctor's full name
+    //   - speciality: string (required) - Doctor's speciality
+    //   - sittingTime: string (required) - Availability time
+    //   - daysAvailable: list (required) - Days available
+    //   - hospitalName: string (required) - Hospital or Clinic name
+    //   - phone: string (required) - Contact phone number
+    //   - email: string (optional) - Doctor's email address
+    //   - createdAt: string (optional) - The time the doctor profile was created
+    //
+    // Collection: appointments
+    // Document ID: {appointmentId}
+    // Fields:
+    //   - userId: string (required) - The user ID
+    //   - doctorName: string (required) - Doctor's name
+    //   - specialty: string (required) - Doctor's specialty
+    //   - date: string (required) - Appointment date
+    //   - time: string (required) - Appointment time
+    //   - reason: string (optional) - Reason for visit
+    //   - status: string (required, enum: ['pending', 'confirmed', 'cancelled'])
+    //   - createdAt: number (required)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -49,12 +74,35 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'createdAt']) &&
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
              data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
              isValidDateString(data.createdAt) &&
              (data.get('displayName', '') is string) &&
-             (data.get('email', '') == null || isValidEmail(data.get('email', ''))) &&
-             (data.get('photoURL', '') is string);
+             (data.get('photoURL', '') is string) &&
+             (data.get('consultationId', '') is string && (data.get('consultationId', '').size() == 0 || data.get('consultationId', '').matches("^\\d{6}$")));
+    }
+
+    function isValidDoctor(data) {
+      return data.keys().hasAll(['uid', 'name', 'speciality', 'sittingTime', 'daysAvailable', 'hospitalName', 'phone']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.speciality is string && data.speciality.size() > 0 && data.speciality.size() < 100 &&
+             data.sittingTime is string && data.sittingTime.size() > 0 && data.sittingTime.size() < 100 &&
+             data.daysAvailable is list && data.daysAvailable.size() > 0 && data.daysAvailable.size() <= 7 &&
+             data.hospitalName is string && data.hospitalName.size() > 0 && data.hospitalName.size() < 100 &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() < 20;
+    }
+
+    function isValidAppointment(data) {
+      return data.keys().hasAll(['userId', 'doctorName', 'specialty', 'date', 'time', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.doctorName is string && data.doctorName.size() > 0 && data.doctorName.size() < 100 &&
+             data.specialty is string && data.specialty.size() > 0 && data.specialty.size() < 100 &&
+             data.date is string && data.date.size() > 0 &&
+             data.time is string && data.time.size() > 0 &&
+             data.status in ['pending', 'confirmed', 'cancelled'] &&
+             data.createdAt is number;
     }
 
     function isValidChat(data, userId) {
@@ -65,26 +113,9 @@ service cloud.firestore {
              isValidDateString(data.timestamp);
     }
 
-    function isValidAppointment(data) {
-      return data.keys().hasAll(['userId', 'doctorName', 'date', 'time', 'status', 'createdAt']) &&
-             data.userId == request.auth.uid &&
-             data.doctorName is string && data.doctorName.size() > 0 && data.doctorName.size() < 100 &&
-             data.date is string && data.time is string &&
-             data.status in ['pending', 'confirmed', 'cancelled'] &&
-             data.createdAt is number;
-    }
-
-    function isValidVital(data) {
-      return data.keys().hasAll(['userId', 'timestamp']) &&
-             data.userId == request.auth.uid &&
-             data.timestamp is number &&
-             (data.get('weight', 0) is number) &&
-             (data.get('heartRate', 0) is number) &&
-             (data.get('temperature', 0) is number);
-    }
-
     function isAdmin() {
-      return false;
+      return isAuthenticated() &&
+        (request.auth.token.email == "kashinathsharma084@gmail.com" && request.auth.token.email_verified == true);
     }
 
     // ===============================================================
@@ -99,25 +130,41 @@ service cloud.firestore {
                       request.resource.data.createdAt == resource.data.createdAt;
 
       match /chats/{chatId} {
-        allow read: if isOwner(userId);
+        allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && isValidChat(request.resource.data, userId);
         allow update: if false; // Chats are immutable
         allow delete: if isOwner(userId);
       }
+
+      match /reminders/{reminderId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+
+      match /symptoms/{symptomId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+
+      match /favorites/{favoriteId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+    }
+
+    match /doctors/{doctorId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(doctorId) && isValidDoctor(request.resource.data);
+      allow update: if isOwner(doctorId) && isValidDoctor(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isOwner(doctorId) || isAdmin();
     }
 
     match /appointments/{appointmentId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && isValidAppointment(request.resource.data);
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidAppointment(request.resource.data);
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
-    }
-
-    match /vitals/{vitalId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && isValidVital(request.resource.data);
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidVital(request.resource.data);
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidAppointment(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Default deny

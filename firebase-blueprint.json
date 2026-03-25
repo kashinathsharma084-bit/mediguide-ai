@@ -9,7 +9,8 @@
         "displayName": { "type": "string", "description": "The user's display name" },
         "email": { "type": "string", "format": "email", "description": "The user's email address" },
         "photoURL": { "type": "string", "description": "The user's profile picture URL" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "The time the user was created" }
+        "createdAt": { "type": "string", "format": "date-time", "description": "The time the user was created" },
+        "consultationId": { "type": "string", "description": "Permanent 6-digit numeric consultation ID" }
       },
       "required": ["uid", "email"]
     },
@@ -25,36 +26,77 @@
       },
       "required": ["userId", "role", "text", "timestamp"]
     },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "User's medication reminders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "medicines": { "type": "array", "items": { "type": "object" } },
+        "time": { "type": "string" },
+        "dates": { "type": "array", "items": { "type": "string" } },
+        "days": { "type": "array", "items": { "type": "string" } },
+        "active": { "type": "boolean" },
+        "takenDates": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "medicines", "time", "days", "active"]
+    },
+    "SymptomHistory": {
+      "title": "SymptomHistory",
+      "description": "User's symptom analysis history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "symptoms": { "type": "string" },
+        "analysis": { "type": "object" }
+      },
+      "required": ["id", "timestamp", "symptoms", "analysis"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "User's favorite medicines",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "info": { "type": "object" }
+      },
+      "required": ["id", "name", "info"]
+    },
+    "Doctor": {
+      "title": "Doctor",
+      "description": "Doctor profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique doctor ID" },
+        "name": { "type": "string", "description": "Doctor's full name" },
+        "speciality": { "type": "string", "description": "Doctor's speciality" },
+        "sittingTime": { "type": "string", "description": "Availability time" },
+        "daysAvailable": { "type": "array", "items": { "type": "string" }, "description": "Days available" },
+        "hospitalName": { "type": "string", "description": "Hospital or Clinic name" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "email": { "type": "string", "format": "email", "description": "Doctor's email address" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The time the doctor profile was created" }
+      },
+      "required": ["uid", "name", "speciality", "sittingTime", "daysAvailable", "hospitalName", "phone"]
+    },
     "Appointment": {
       "title": "Appointment",
-      "description": "User's doctor appointments",
+      "description": "User's medical appointments",
       "type": "object",
       "properties": {
-        "userId": { "type": "string", "description": "The user ID" },
-        "doctorName": { "type": "string", "description": "The doctor's name" },
-        "specialty": { "type": "string", "description": "The doctor's specialty" },
-        "date": { "type": "string", "description": "The appointment date" },
-        "time": { "type": "string", "description": "The appointment time" },
-        "reason": { "type": "string", "description": "The reason for the visit" },
-        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled"], "description": "The appointment status" },
-        "createdAt": { "type": "number", "description": "The time the appointment was booked" }
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "doctorName": { "type": "string" },
+        "specialty": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled"] },
+        "createdAt": { "type": "number" }
       },
-      "required": ["userId", "doctorName", "date", "time", "status", "createdAt"]
-    },
-    "VitalSigns": {
-      "title": "VitalSigns",
-      "description": "User's health vitals tracking",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string", "description": "The user ID" },
-        "timestamp": { "type": "number", "description": "The time the vitals were recorded" },
-        "weight": { "type": "number", "description": "The user's weight in kg" },
-        "bloodPressureSystolic": { "type": "number", "description": "Systolic blood pressure" },
-        "bloodPressureDiastolic": { "type": "number", "description": "Diastolic blood pressure" },
-        "heartRate": { "type": "number", "description": "Heart rate in bpm" },
-        "temperature": { "type": "number", "description": "Body temperature in Celsius" }
-      },
-      "required": ["userId", "timestamp"]
+      "required": ["userId", "doctorName", "specialty", "date", "time", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -66,13 +108,25 @@
       "schema": "ChatHistory",
       "description": "User's chat history"
     },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": "Reminder",
+      "description": "User's medication reminders"
+    },
+    "/users/{userId}/symptoms/{symptomId}": {
+      "schema": "SymptomHistory",
+      "description": "User's symptom history"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "User's favorite medicines"
+    },
+    "/doctors/{doctorId}": {
+      "schema": "Doctor",
+      "description": "Doctor profiles"
+    },
     "/appointments/{appointmentId}": {
       "schema": "Appointment",
-      "description": "Doctor appointments"
-    },
-    "/vitals/{vitalId}": {
-      "schema": "VitalSigns",
-      "description": "Health vitals tracking"
+      "description": "User's medical appointments"
     }
   }
 }

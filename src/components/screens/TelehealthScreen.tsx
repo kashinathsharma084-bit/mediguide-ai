@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { 
-  Video, User, Phone, Info, Check, Copy, PhoneOff, VideoOff, Mic, MicOff
+  Video, User, Phone, Info, Check, Copy, PhoneOff, VideoOff, Mic, MicOff, Loader2
 } from 'lucide-react';
 import Peer from 'peerjs';
 import { cn } from '../../lib/utils';
+import { db, doc, getDoc, updateDoc, type User as FirebaseUser } from '../../firebase';
+import { UserProfile } from '../../types';
 
 interface TelehealthScreenProps {
   language: string;
   t: (s: string) => string;
+  user: FirebaseUser;
 }
 
-export default function TelehealthScreen({ language, t }: TelehealthScreenProps) {
+export default function TelehealthScreen({ language, t, user }: TelehealthScreenProps) {
   const [peerId, setPeerId] = useState<string>('');
   const [remotePeerId, setRemotePeerId] = useState<string>('');
   const [peer, setPeer] = useState<Peer | null>(null);
@@ -23,31 +26,68 @@ export default function TelehealthScreen({ language, t }: TelehealthScreenProps)
   const [copied, setCopied] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const newPeer = new Peer();
-    
-    newPeer.on('open', (id) => {
-      setPeerId(id);
-    });
+    const initPeer = async () => {
+      let consultationId = '';
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const userData = userSnap.data() as UserProfile;
+          if (userData.consultationId) {
+            consultationId = userData.consultationId;
+          } else {
+            // Generate a 6-digit numeric ID
+            consultationId = Math.floor(100000 + Math.random() * 900000).toString();
+            await updateDoc(userRef, { consultationId });
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching/generating consultation ID:", error);
+      }
 
-    newPeer.on('call', (incomingCall) => {
-      setIsIncomingCall(true);
-      setCall(incomingCall);
-    });
+      // If we couldn't get a consultationId, PeerJS will generate a random one
+      // but the user requested a permanent 6-digit one.
+      const newPeer = consultationId ? new Peer(consultationId) : new Peer();
+      
+      newPeer.on('open', (id) => {
+        setPeerId(id);
+        setIsInitializing(false);
+      });
 
-    setPeer(newPeer);
+      newPeer.on('call', (incomingCall) => {
+        setIsIncomingCall(true);
+        setCall(incomingCall);
+      });
+
+      newPeer.on('error', (err) => {
+        console.error("PeerJS error:", err);
+        // If ID is taken, try again with a random one or alert
+        if (err.type === 'unavailable-id') {
+          const fallbackPeer = new Peer();
+          fallbackPeer.on('open', (id) => setPeerId(id));
+          setPeer(fallbackPeer);
+        }
+      });
+
+      setPeer(newPeer);
+    };
+
+    initPeer();
 
     return () => {
-      newPeer.destroy();
+      if (peer) peer.destroy();
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [user.uid]);
 
   useEffect(() => {
     if (localVideoRef.current && stream) {
@@ -143,6 +183,15 @@ export default function TelehealthScreen({ language, t }: TelehealthScreenProps)
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (isInitializing) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 space-y-4">
+        <Loader2 className="animate-spin text-primary" size={40} />
+        <p className="text-slate-500 font-medium">{t("Initializing consultation...")}</p>
+      </div>
+    );
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
@@ -168,16 +217,16 @@ export default function TelehealthScreen({ language, t }: TelehealthScreenProps)
               <h3 className="font-bold text-sm">{t("Your Consultation ID")}</h3>
             </div>
             <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-              <code className="flex-1 text-xs font-mono text-slate-600 truncate">{peerId || t("Generating...")}</code>
+              <code className="flex-1 text-xl font-mono text-primary font-bold tracking-[0.2em] text-center">{peerId || t("Generating...")}</code>
               <button 
                 onClick={copyId}
                 className="p-2 hover:bg-slate-200 rounded-xl transition-colors text-slate-400"
               >
-                {copied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
+                {copied ? <Check size={20} className="text-emerald-500" /> : <Copy size={20} />}
               </button>
             </div>
             <p className="text-[10px] text-slate-400 leading-relaxed italic">
-              {t("Share this ID with your doctor or another user to receive a call.")}
+              {t("This is your permanent 6-digit consultation ID. Share it with your doctor to receive a call.")}
             </p>
           </div>
 
@@ -190,14 +239,15 @@ export default function TelehealthScreen({ language, t }: TelehealthScreenProps)
             <div className="space-y-3">
               <input 
                 type="text" 
-                placeholder={t("Enter Doctor's ID...")}
+                maxLength={6}
+                placeholder={t("Enter 6-digit Doctor's ID...")}
                 value={remotePeerId}
-                onChange={(e) => setRemotePeerId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                onChange={(e) => setRemotePeerId(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-lg font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               />
               <button 
                 onClick={handleCall}
-                disabled={!remotePeerId || !peerId}
+                disabled={remotePeerId.length !== 6 || !peerId}
                 className="w-full bg-primary text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
               >
                 <Video size={18} />
@@ -213,8 +263,8 @@ export default function TelehealthScreen({ language, t }: TelehealthScreenProps)
               {t("How it works")}
             </h4>
             <ul className="text-[11px] text-amber-700/80 space-y-2 list-disc pl-4">
-              <li>{t("Share your ID with a healthcare provider.")}</li>
-              <li>{t("Or enter the provider's ID to initiate a call.")}</li>
+              <li>{t("Share your permanent ID with a healthcare provider.")}</li>
+              <li>{t("Or enter the provider's 6-digit ID to initiate a call.")}</li>
               <li>{t("Ensure you have a stable internet connection.")}</li>
               <li>{t("Grant camera and microphone permissions when prompted.")}</li>
             </ul>
